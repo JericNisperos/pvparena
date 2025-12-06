@@ -284,14 +284,19 @@ public class ArenaPlayer {
     public void revive(PADeathInfo deathInfo) {
         debug(this, "respawning player");
         
+        // MODIFIED: Preserve player's existing health on respawn
+        // Original code reset health to configured value, but we want to preserve custom health (>20 hearts)
+        // final Config config = this.arena.getConfig();
+        // double iHealth = config.getInt(CFG.PLAYER_HEALTH, -1);
+        //
+        // if (iHealth < 1) {
+        //     iHealth = this.player.getAttribute(AttributeAdapter.MAX_HEALTH.getValue()).getBaseValue();
+        // }
+        //
+        // PlayerState.playersetHealth(this.player, iHealth);
+        // END MODIFICATION
+        
         final Config config = this.arena.getConfig();
-        double iHealth = config.getInt(CFG.PLAYER_HEALTH, -1);
-
-        if (iHealth < 1) {
-            iHealth = this.player.getAttribute(AttributeAdapter.MAX_HEALTH.getValue()).getBaseValue();
-        }
-
-        PlayerState.playersetHealth(this.player, iHealth);
         this.player.setFoodLevel(config.getInt(CFG.PLAYER_FOODLEVEL, 20));
         this.player.setSaturation(config.getInt(CFG.PLAYER_SATURATION, 20));
         this.player.setExhaustion((float) config.getDouble(CFG.PLAYER_EXHAUSTION, 0.0));

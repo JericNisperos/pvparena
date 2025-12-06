@@ -104,7 +104,7 @@
 
     <build>
         <defaultGoal>clean package install</defaultGoal>
-        <finalName>pvparena-${project.version}${buildVersion}</finalName>
+        <finalName>pvparena-cyan</finalName>
 
         <resources>
             <resource>

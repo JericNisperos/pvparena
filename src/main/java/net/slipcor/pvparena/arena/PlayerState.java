@@ -108,22 +108,25 @@ public final class PlayerState {
     }
 
     public static void fullReset(final Arena arena, final Player player) {
-        int iHealth = arena.getConfig().getInt(CFG.PLAYER_HEALTH);
-
-        AttributeInstance playerMaxHealth = player.getAttribute(AttributeAdapter.MAX_HEALTH.getValue());
-        if (iHealth < 1) {
-            iHealth = (int) playerMaxHealth.getBaseValue();
-        }
-
-        if (arena.getConfig().getInt(CFG.PLAYER_MAXHEALTH) > 0) {
-             playerMaxHealth.setBaseValue(arena.getConfig().getInt(CFG.PLAYER_MAXHEALTH));
-        }
-
-        if (iHealth > playerMaxHealth.getBaseValue()) {
-            player.setHealth(playerMaxHealth.getBaseValue());
-        } else {
-            playersetHealth(player, iHealth);
-        }
+        // MODIFIED: Preserve player's existing health when joining lobby
+        // Original code set health to configured value, but we want to preserve custom health (>20 hearts)
+        // int iHealth = arena.getConfig().getInt(CFG.PLAYER_HEALTH);
+        //
+        // AttributeInstance playerMaxHealth = player.getAttribute(AttributeAdapter.MAX_HEALTH.getValue());
+        // if (iHealth < 1) {
+        //     iHealth = (int) playerMaxHealth.getBaseValue();
+        // }
+        //
+        // if (arena.getConfig().getInt(CFG.PLAYER_MAXHEALTH) > 0) {
+        //      playerMaxHealth.setBaseValue(arena.getConfig().getInt(CFG.PLAYER_MAXHEALTH));
+        // }
+        //
+        // if (iHealth > playerMaxHealth.getBaseValue()) {
+        //     player.setHealth(playerMaxHealth.getBaseValue());
+        // } else {
+        //     playersetHealth(player, iHealth);
+        // }
+        // END MODIFICATION
         player.setFireTicks(0);
         try {
             Bukkit.getScheduler().runTaskLater(PVPArena.getInstance(), () -> {
