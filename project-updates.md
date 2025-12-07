@@ -204,3 +204,52 @@
 - ⚠️ Build pending due to dependency download issue (not code-related)
 - 📝 Ready for manual commit via GitHub UI when build completes and testing passes
 
+---
+
+## Phase 7: New Feature - AutoJoin Command ✅ COMPLETED
+**Timeframe:** 2025-12-06 15:00 - 15:15
+
+### Step 7.1: Feature Request ✅
+- **Status:** Implemented
+- **Description:** New `/pa autojoin` command that automatically joins a random enabled arena
+
+### Step 7.2: Implementation ✅
+- **Status:** Completed
+- **Files Created:**
+  1. **PAG_AutoJoin.java** (New file)
+     - Location: `src/main/java/net/slipcor/pvparena/commands/PAG_AutoJoin.java`
+     - Extends: `AbstractGlobalCommand`
+     - Command: `/pa autojoin` or `/pa -aj`
+     - Permission: `pvparena.cmds.autojoin`
+
+- **Files Modified:**
+  2. **PVPArena.java** (Line 193)
+     - Added: `this.globalCommands.add(new PAG_AutoJoin());`
+     - Registers the new command in the global commands list
+
+### Step 7.3: Command Features ✅
+- ✅ Filters to only enabled (not locked) arenas
+- ✅ Checks player permissions for each arena
+- ✅ Excludes full arenas
+- ✅ Respects join restrictions (fight in progress, rejoin settings)
+- ✅ Checks join regions and distance requirements
+- ✅ Randomly selects from available joinable arenas
+- ✅ Provides helpful error messages if no arenas are available
+- ✅ Prevents joining if player is already in an arena
+
+### Step 7.4: Usage
+- **Command:** `/pa autojoin` or `/pa -aj`
+- **Permission:** `pvparena.cmds.autojoin` (defaults to true via `pvparena.user`)
+- **Behavior:** Automatically finds and joins a random enabled arena that the player can join
+
+### Testing Checklist for AutoJoin:
+- [ ] Test with multiple enabled arenas (should randomly select one)
+- [ ] Test with all arenas disabled (should show "No arenas found!" error)
+- [ ] Test with all arenas full (should show "No arenas found!" error)
+- [ ] Test with no permission (should show permission error)
+- [ ] Test when already in an arena (should show "already part of" error)
+- [ ] Verify random selection works (run multiple times)
+- [ ] Verify join restrictions are respected (fight in progress, rejoin settings)
+- [ ] Verify join region requirements are checked
+- [ ] Verify distance requirements are checked
+

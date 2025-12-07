@@ -190,6 +190,7 @@ public class PVPArena extends JavaPlugin {
         this.globalCommands.add(new PAI_GlobalStats());
         this.globalCommands.add(new PAI_Help());
         this.globalCommands.add(new PAI_Version());
+        this.globalCommands.add(new PAG_AutoJoin());
     }
 
     @Override
