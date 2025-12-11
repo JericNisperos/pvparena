@@ -293,17 +293,13 @@ public class ArenaScoreboard {
     private void initSpecialScoreboard() {
         this.initCommonScoreboard(true);
 
-        // length = 18 without arena name
-        String sbHeaderPrefix = ChatColor.GREEN + "PVP Arena" + ChatColor.RESET + " - " + ChatColor.YELLOW;
-        String sbHeaderName = sbHeaderPrefix + this.arena.getName();
+        // MODIFIED: Use glyph logo text instead of "PVP Arena - [Arena Name]"
+        // Using <glyph:logo-text> for custom font display (requires resource pack with glyph font)
+        String sbHeaderName = "<glyph:logo-text>";
 
-        if (sbHeaderName.length() > 32) {
-            if (this.arena.getPrefix().length() <= 14) {
-                sbHeaderName = sbHeaderPrefix + this.arena.getPrefix();
-            } else {
-                sbHeaderName = sbHeaderName.substring(0, 32);
-            }
-        }
+        // Note: Scoreboard titles have a 32 character limit in older versions
+        // If the glyph text is too long, it will be truncated by Minecraft
+        // The glyph format requires a resource pack with custom font definitions
 
         ofNullable(this.getLivesObjective()).ifPresent(objective -> {
             objective.unregister();

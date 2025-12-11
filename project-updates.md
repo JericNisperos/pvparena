@@ -253,3 +253,40 @@
 - [ ] Verify join region requirements are checked
 - [ ] Verify distance requirements are checked
 
+---
+
+## Phase 8: Scoreboard Title Modification ✅ COMPLETED
+**Timeframe:** 2025-12-06 15:20 - 15:25
+
+### Step 8.1: Locate Scoreboard Title Code ✅
+- **Status:** Found
+- **Location:** `ArenaScoreboard.initSpecialScoreboard()` method
+- **Line:** 297-298
+- **Original Code:** 
+  ```java
+  String sbHeaderPrefix = ChatColor.GREEN + "PVP Arena" + ChatColor.RESET + " - " + ChatColor.YELLOW;
+  String sbHeaderName = sbHeaderPrefix + this.arena.getName();
+  ```
+
+### Step 8.2: Modify Scoreboard Title ✅
+- **Status:** Completed
+- **File:** `src/main/java/net/slipcor/pvparena/arena/ArenaScoreboard.java`
+- **Lines Modified:** 293-318
+- **Change:** Replaced scoreboard title with `<glyph:logo-text>`
+- **Result:** Scoreboard now displays custom glyph logo instead of "PVP Arena - [Arena Name]"
+- **Note:** Requires resource pack with custom font definitions for the glyph to display properly
+
+### Files Modified:
+4. **ArenaScoreboard.java** (Lines 293-318)
+   - Changed scoreboard title from "PVP Arena - [Arena Name]" to `<glyph:logo-text>`
+   - Removed arena name from title
+   - Removed color formatting code
+   - Added comments explaining glyph usage
+
+### Testing Checklist for Scoreboard:
+- [ ] Verify scoreboard displays with glyph logo (requires resource pack)
+- [ ] Test with resource pack that has `logo-text` glyph defined
+- [ ] Verify scoreboard still functions correctly (lives, teams, etc.)
+- [ ] Test on different Minecraft versions (1.16.5+)
+- [ ] Verify fallback behavior if glyph is not available
+
