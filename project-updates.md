@@ -158,6 +158,14 @@
 
 ### Build Status: ⚠️ Pending (dependency download issue)
 
+### Build Command:
+```bash
+mvn clean package -DskipTests
+```
+- **Location:** Run from project root directory (`D:\Git\pvparena`)
+- **Output:** `target/pvparena-cyan.jar`
+- **Note:** `-DskipTests` skips running tests (faster build)
+
 ### Next Steps:
 1. Resolve dependency download issue (network/connectivity)
 2. Complete Maven build: `mvn clean package -DskipTests`
@@ -233,22 +241,42 @@
 - ✅ Excludes full arenas
 - ✅ Respects join restrictions (fight in progress, rejoin settings)
 - ✅ Checks join regions and distance requirements
-- ✅ Randomly selects from available joinable arenas
+- ✅ **Smart Selection Logic:**
+  - **Priority 1:** Selects arenas that already have players
+  - **Priority 2:** If multiple arenas have players, joins the one with the highest player count
+  - **Priority 3:** If no arenas have players, randomly selects from available arenas
 - ✅ Provides helpful error messages if no arenas are available
 - ✅ Prevents joining if player is already in an arena
 
 ### Step 7.4: Usage
 - **Command:** `/pa autojoin` or `/pa -aj`
 - **Permission:** `pvparena.cmds.autojoin` (defaults to true via `pvparena.user`)
-- **Behavior:** Automatically finds and joins a random enabled arena that the player can join
+- **Behavior:** Automatically finds and joins an enabled arena that the player can join
+  - **Priority:** Joins arenas with existing players first (highest player count)
+  - **Fallback:** Randomly selects if no arenas have players
+
+### Step 7.5: Enhanced Selection Logic ✅ (Updated 2025-12-06)
+- **Status:** Completed
+- **Enhancement:** Improved arena selection to prioritize populated arenas
+- **File Modified:** `PAG_AutoJoin.java` (Lines 117-137)
+- **Changes:**
+  - Added `Comparator` import for sorting
+  - Implemented smart selection logic:
+    1. First checks for arenas with existing players
+    2. Selects arena with highest player count if multiple have players
+    3. Falls back to random selection if no arenas have players
+  - Added debug logging for selection process
 
 ### Testing Checklist for AutoJoin:
-- [ ] Test with multiple enabled arenas (should randomly select one)
+- [ ] Test with multiple enabled arenas (should prioritize arenas with players)
+- [ ] Test with one arena having players (should join that arena)
+- [ ] Test with multiple arenas having players (should join the one with highest player count)
+- [ ] Test with no arenas having players (should randomly select)
 - [ ] Test with all arenas disabled (should show "No arenas found!" error)
 - [ ] Test with all arenas full (should show "No arenas found!" error)
 - [ ] Test with no permission (should show permission error)
 - [ ] Test when already in an arena (should show "already part of" error)
-- [ ] Verify random selection works (run multiple times)
+- [ ] Verify player count prioritization works correctly
 - [ ] Verify join restrictions are respected (fight in progress, rejoin settings)
 - [ ] Verify join region requirements are checked
 - [ ] Verify distance requirements are checked

@@ -13,6 +13,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
@@ -113,8 +114,26 @@ public class PAG_AutoJoin extends AbstractGlobalCommand {
             return;
         }
 
-        // Randomly select an arena from available ones
-        final Arena selectedArena = RandomUtils.getRandom(availableArenas, new Random());
+        // Priority 1: Arenas with players (highest player count first)
+        // Priority 2: If no arenas have players, randomly select
+        Arena selectedArena = null;
+
+        // First, try to find arenas that already have players
+        Set<Arena> arenasWithPlayers = availableArenas.stream()
+                .filter(arena -> arena.getEveryone().size() > 0)
+                .collect(Collectors.toSet());
+
+        if (!arenasWithPlayers.isEmpty()) {
+            // Select the arena with the highest player count
+            selectedArena = arenasWithPlayers.stream()
+                    .max(Comparator.comparingInt(arena -> arena.getEveryone().size()))
+                    .orElse(null);
+            debug(player, "Found {} arena(s) with players, selecting arena with highest player count", arenasWithPlayers.size());
+        } else {
+            // No arenas have players, randomly select from available arenas
+            selectedArena = RandomUtils.getRandom(availableArenas, new Random());
+            debug(player, "No arenas have players, randomly selecting from {} available arena(s)", availableArenas.size());
+        }
         
         if (selectedArena == null) {
             Arena.pmsg(player, MSG.ERROR_NO_ARENAS);
