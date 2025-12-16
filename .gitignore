@@ -11,6 +11,7 @@ dependency-reduced-pom.xml
 /.settings/
 /.classpath
 /.project
+/analysis
 
 master-prompt.md
 project-updates.md
