@@ -68,6 +68,7 @@ public class ArenaModuleManager {
         this.addInternalLoadable(QuickLounge.class);
         this.addInternalLoadable(StandardLounge.class);
         this.addInternalLoadable(StandardSpectate.class);
+        this.addInternalLoadable(net.slipcor.pvparena.modules.ELORating.class);
     }
 
     public static void announce(final Arena arena, final String message, final String type) {

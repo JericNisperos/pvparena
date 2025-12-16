@@ -1,0 +1,43 @@
+# ELO Rating Module Configuration
+# This file is automatically created when the module is first loaded
+# Location: plugins/PVPArena/modules/elo/config.yml
+
+# Database Configuration
+database:
+  host: localhost
+  port: 3306
+  database: pvparena_elo
+  username: root
+  password: ""
+  connection_pool_size: 5
+
+# ELO Rating Settings
+elo:
+  # Enable or disable ELO tracking
+  enabled: true
+  
+  # K-Factor: Maximum rating change per match
+  # Common values: 16 (stable), 24 (standard), 32 (volatile)
+  # Higher values = more rating change per match
+  k_factor: 24
+  
+  # Initial rating for new players
+  initial_rating: 1000
+  
+  # Track ELO per arena (true) or globally (false)
+  # If true, each arena has separate ELO ratings
+  # If false, all arenas share the same ELO rating
+  per_arena: false
+  
+  # Display ELO rating when player joins arena
+  display_on_join: true
+
+# Message Configuration
+# Use & for color codes (e.g., &a for green, &c for red, &e for yellow)
+# Placeholders: %rating% = current rating, %change% = rating change, %amount% = change amount
+messages:
+  rating_display: "&eYour ELO Rating: &a%rating%"
+  rating_change: "&eELO Change: %change%"
+  rating_gain: "&a+%amount%"
+  rating_loss: "&c-%amount%"
+

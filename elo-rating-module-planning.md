@@ -385,9 +385,195 @@ messages:
 
 ---
 
-## 7. Testing Checklist
+## 7. Testing Scenarios & Potential Break Points
 
-### 7.1 Basic Functionality
+### 7.1 Critical Scenarios to Test
+
+#### Scenario 1: Database Connection Failure
+**Test:** Start server with MySQL unavailable or wrong credentials
+**Expected:** Module disables gracefully, no crashes, error logged
+**Potential Issue:** `NullPointerException` if database is null but module tries to use it
+**Current Protection:** ✅ Check `database == null` before use
+**Risk Level:** Low
+
+#### Scenario 2: Player Disconnects During Match End
+**Test:** Player disconnects right as match ends, `ap.getPlayer()` returns null
+**Expected:** Skip that player, continue with others
+**Potential Issue:** `NullPointerException` at line 176, 243, 272
+**Current Protection:** ✅ Check `player == null` at line 274
+**Risk Level:** Medium - Need to verify all paths
+
+#### Scenario 3: Empty Winners Set
+**Test:** Match ends with no winners (draw scenario)
+**Expected:** No ELO calculation, no errors
+**Current Protection:** ✅ Check `winners.isEmpty()` at line 159
+**Risk Level:** Low
+
+#### Scenario 4: No Fighters in Match
+**Test:** Match ends but `arena.getFighters()` returns empty set
+**Expected:** Skip ELO calculation, no errors
+**Current Protection:** ✅ Check `allPlayers.isEmpty()` at line 168
+**Risk Level:** Low
+
+#### Scenario 5: Team Member with Null Team
+**Test:** In team match, player has `getArenaTeam() == null`
+**Expected:** Filtered out, not included in team calculations
+**Current Protection:** ✅ Filter `ap.getArenaTeam() != null` at line 192
+**Risk Level:** Low
+
+#### Scenario 6: Database Connection Lost Mid-Update
+**Test:** Database connection drops while updating ratings
+**Expected:** Error logged, remaining updates continue or fail gracefully
+**Potential Issue:** Partial updates, inconsistent state
+**Current Protection:** ⚠️ Each update is independent, but no transaction rollback
+**Risk Level:** Medium - Could result in partial updates
+
+#### Scenario 7: Multiple Arenas Ending Simultaneously
+**Test:** Two arenas with same module end at exact same time
+**Expected:** Both calculate ELO independently
+**Potential Issue:** Database connection sharing, race conditions
+**Current Protection:** ⚠️ Each module instance has own database object, but connection might be shared
+**Risk Level:** Medium - Need to verify connection isolation
+
+#### Scenario 8: Invalid Configuration Values
+**Test:** Set `k_factor: -10` or `initial_rating: -1000` in config
+**Expected:** Use defaults or validate values
+**Potential Issue:** Negative ratings, incorrect calculations
+**Current Protection:** ❌ No validation of config values
+**Risk Level:** High - Should add validation
+
+#### Scenario 9: Very Large Rating Changes
+**Test:** Player with 1000 rating beats player with 3000 rating (extreme difference)
+**Expected:** Large but reasonable rating change
+**Potential Issue:** Rating could go negative or extremely high
+**Current Protection:** ❌ No rating caps
+**Risk Level:** Medium - Should consider min/max bounds
+
+#### Scenario 10: FFA Match with Only Winner
+**Test:** FFA match with 1 winner, no other players
+**Expected:** No ELO change (no opponents to calculate against)
+**Current Protection:** ✅ Loop skips self, but no opponents = no change
+**Risk Level:** Low
+
+#### Scenario 11: Team Match with Single Player Teams
+**Test:** 1v1 team match
+**Expected:** Normal ELO calculation between two players
+**Current Protection:** ✅ Should work, but verify team averaging
+**Risk Level:** Low
+
+#### Scenario 12: Config File Missing or Corrupted
+**Test:** Delete or corrupt `config.yml` file
+**Expected:** Create default config or use hardcoded defaults
+**Current Protection:** ✅ Creates default config if missing at line 63
+**Risk Level:** Low
+
+#### Scenario 13: Database Table Already Exists
+**Test:** Module loads when table already exists
+**Expected:** Use existing table, no errors
+**Current Protection:** ✅ `CREATE TABLE IF NOT EXISTS` at line 63
+**Risk Level:** Low
+
+#### Scenario 14: Player UUID Format Issues
+**Test:** UUID stored incorrectly or null UUID
+**Expected:** Handle gracefully or skip
+**Potential Issue:** SQL errors or null pointer
+**Current Protection:** ⚠️ No validation of UUID format
+**Risk Level:** Medium - Should validate UUIDs
+
+#### Scenario 15: Concurrent Rating Updates
+**Test:** Same player in multiple arenas ending simultaneously (if per_arena=false)
+**Expected:** Last update wins, or handle race condition
+**Potential Issue:** Lost updates, inconsistent ratings
+**Current Protection:** ❌ No locking mechanism
+**Risk Level:** High - Race condition possible
+
+### 7.2 Edge Cases & Boundary Conditions
+
+#### Edge Case 1: Zero K-Factor
+**Test:** `k_factor: 0` in config
+**Expected:** No rating changes
+**Current Protection:** ❌ No validation
+**Risk Level:** Low (works but useless)
+
+#### Edge Case 2: Extremely High K-Factor
+**Test:** `k_factor: 1000` in config
+**Expected:** Massive rating swings
+**Current Protection:** ❌ No validation
+**Risk Level:** Medium - Could break rating system
+
+#### Edge Case 3: Negative Initial Rating
+**Test:** `initial_rating: -500` in config
+**Expected:** New players start with negative rating
+**Current Protection:** ❌ No validation
+**Risk Level:** Medium - Unusual but might work
+
+#### Edge Case 4: Team with Zero Members
+**Test:** Empty team somehow in match
+**Expected:** Skip or handle gracefully
+**Current Protection:** ✅ `calculateAverageTeamRating` returns 1000.0 for empty team
+**Risk Level:** Low
+
+#### Edge Case 5: Very Large Number of Players
+**Test:** 50+ players in FFA match
+**Expected:** Performance acceptable, all calculations complete
+**Potential Issue:** O(n²) complexity for FFA, could lag
+**Current Protection:** ❌ No performance limits
+**Risk Level:** Medium - Could cause lag with many players
+
+#### Edge Case 6: Identical Ratings
+**Test:** All players have same rating (e.g., all 1000)
+**Expected:** Small rating changes based on results
+**Current Protection:** ✅ Formula handles this correctly
+**Risk Level:** Low
+
+#### Edge Case 7: Arena Name as UUID
+**Test:** Using arena name instead of UUID for per_arena mode
+**Expected:** Works, but names might not be unique
+**Current Protection:** ⚠️ Uses `arena.getName()` which might not be unique
+**Risk Level:** Medium - Should use actual UUID
+
+### 7.3 Potential Code Issues
+
+#### Issue 1: Resource Leaks
+**Location:** `ELODatabase.java`
+**Problem:** Connection might not be closed if exception occurs
+**Current Protection:** ⚠️ Only closes in `closeConnection()`, not in try-with-resources
+**Fix Needed:** Use try-with-resources or ensure cleanup in finally blocks
+**Risk Level:** Medium
+
+#### Issue 2: SQL Injection
+**Location:** All database methods
+**Problem:** User input in SQL queries
+**Current Protection:** ✅ Using PreparedStatement with parameters
+**Risk Level:** Low
+
+#### Issue 3: Connection State Not Checked
+**Location:** `getPlayerRating()`, `updatePlayerRating()`
+**Problem:** Connection might be closed but not null
+**Current Protection:** ⚠️ Checks `connection == null` but not `connection.isClosed()`
+**Risk Level:** Medium - Could cause SQLException
+
+#### Issue 4: No Transaction Management
+**Location:** `updateRatingsAndNotify()`
+**Problem:** Multiple updates, if one fails others might succeed
+**Current Protection:** ❌ No transaction wrapping
+**Risk Level:** Medium - Partial updates possible
+
+#### Issue 5: ResultSet Not Closed
+**Location:** `getPlayerRating()`, `getTopRatings()`
+**Problem:** ResultSet might not be closed if exception occurs
+**Current Protection:** ⚠️ Not using try-with-resources
+**Risk Level:** Medium - Resource leak
+
+#### Issue 6: PreparedStatement Not Closed
+**Location:** All database methods
+**Problem:** Statements might not be closed
+**Current Protection:** ⚠️ Not using try-with-resources
+**Risk Level:** Medium - Resource leak
+
+### 7.4 Testing Checklist
+
+#### 7.4.1 Basic Functionality
 - [ ] Module loads and registers correctly
 - [ ] ELO ratings initialize for new players
 - [ ] ELO calculates correctly for team wins
@@ -396,24 +582,108 @@ messages:
 - [ ] ELO changes display after match
 - [ ] ELO ratings persist across server restarts
 
-### 7.2 Edge Cases
+#### 7.4.2 Edge Cases
 - [ ] New players get initial rating
 - [ ] Players who leave mid-match don't get ELO changes
-- [ ] Draws handled correctly (0.5 score)
+- [ ] Draws handled correctly (0.5 score) - **NOT IMPLEMENTED YET**
 - [ ] Team size imbalance handled correctly
 - [ ] Per-arena vs global ELO works correctly
 - [ ] Leaderboard displays correctly
+- [ ] Empty winners set handled
+- [ ] No fighters handled
+- [ ] Null team members filtered out
 
-### 7.3 Configuration
+#### 7.4.3 Error Handling
+- [ ] Database connection failure handled gracefully
+- [ ] Invalid config values handled (or validated)
+- [ ] Null players skipped without errors
+- [ ] SQL exceptions logged but don't crash
+- [ ] Missing config file creates defaults
+
+#### 7.4.4 Configuration
 - [ ] K-factor changes affect calculations
 - [ ] Initial rating config works
 - [ ] Per-arena toggle works
 - [ ] Display on join toggle works
+- [ ] Config reload works (if implemented)
 
-### 7.4 Performance
+#### 7.4.5 Performance
 - [ ] ELO calculation doesn't lag match end
 - [ ] Storage operations are efficient
 - [ ] Leaderboard queries are fast
+- [ ] Large matches (50+ players) complete in reasonable time
+
+#### 7.4.6 Concurrency
+- [ ] Multiple arenas can end simultaneously
+- [ ] Same player in multiple arenas handled correctly
+- [ ] Database updates don't conflict
+
+---
+
+## 7.5 Recommended Fixes Before Production
+
+### High Priority Fixes
+
+1. **Add Config Validation**
+   ```java
+   // In loadConfig()
+   if (kFactor < 0 || kFactor > 100) {
+       PVPArena.getInstance().getLogger().warning("Invalid k_factor, using default 24");
+       kFactor = 24;
+   }
+   if (initialRating < 0 || initialRating > 10000) {
+       PVPArena.getInstance().getLogger().warning("Invalid initial_rating, using default 1000");
+       initialRating = 1000;
+   }
+   ```
+
+2. **Use Try-With-Resources for Database Operations**
+   ```java
+   // In getPlayerRating()
+   try (PreparedStatement stmt = connection.prepareStatement(sql);
+        ResultSet rs = stmt.executeQuery()) {
+       // ... code
+   }
+   ```
+
+3. **Add Connection State Check**
+   ```java
+   // In all database methods
+   if (connection == null || connection.isClosed()) {
+       if (!initializeDatabase()) {
+           return defaultRating; // or handle error
+       }
+   }
+   ```
+
+4. **Add Rating Bounds (Optional)**
+   ```java
+   // In updateRatingsAndNotify()
+   double newRating = Math.max(0, Math.min(10000, oldRating + change));
+   ```
+
+5. **Handle Draws/Ties**
+   ```java
+   // In processTeamMatch() - detect draws
+   if (winners.size() == playersByTeam.size()) {
+       // It's a draw, use actualScore = 0.5
+   }
+   ```
+
+### Medium Priority Fixes
+
+6. **Add Transaction Support** (for atomic updates)
+7. **Use Arena UUID Instead of Name** (for per_arena mode)
+8. **Add Connection Pooling** (HikariCP)
+9. **Add Async Database Operations** (to avoid lag)
+10. **Add Retry Logic** (for transient database failures)
+
+### Low Priority Fixes
+
+11. **Add Rating History Tracking**
+12. **Add Leaderboard Command**
+13. **Add Rating Display on Join** (implement announce() properly)
+14. **Add Performance Monitoring**
 
 ---
 
@@ -546,8 +816,47 @@ Since we're avoiding modifications to core files, the module will:
 
 ---
 
+---
+
+## 13. Critical Issues Summary
+
+### ⚠️ Must Fix Before Production
+
+1. **Resource Leaks** - Database connections and ResultSets not properly closed
+   - **Impact:** Memory leaks, connection pool exhaustion
+   - **Fix:** Use try-with-resources for all database operations
+
+2. **No Config Validation** - Invalid values can break calculations
+   - **Impact:** Negative ratings, incorrect calculations
+   - **Fix:** Validate k_factor and initial_rating ranges
+
+3. **No Draw Handling** - Draws not implemented (always win/loss)
+   - **Impact:** Incorrect ELO for tied matches
+   - **Fix:** Detect draws and use actualScore = 0.5
+
+4. **Connection State Not Fully Checked** - Only checks null, not isClosed()
+   - **Impact:** SQLExceptions during runtime
+   - **Fix:** Check both null and isClosed()
+
+### 🔶 Should Fix Soon
+
+5. **No Transaction Management** - Partial updates possible
+6. **Arena Name vs UUID** - Should use actual UUID for per_arena mode
+7. **No Rating Bounds** - Ratings can go negative or extremely high
+8. **No Async Operations** - Database calls block main thread
+
+### ✅ Already Protected
+
+- Null pointer checks for players
+- Empty winners/fighters checks
+- Team null checks
+- Database connection failure handling
+- Config file creation
+
+---
+
 **Document Created:** 2025-12-06  
 **Last Updated:** 2025-12-06  
-**Status:** Simplified - Ready for Implementation  
-**Next Step:** Begin Phase 1 - Database setup and module structure
+**Status:** Implementation Complete - Testing & Fixes Needed  
+**Next Step:** Review critical issues and apply recommended fixes
 
