@@ -73,6 +73,8 @@ public final class Language {
         CMD_HELP_MESSAGE("cmd.help.message", "Documentation and all help about commands are available online on &9%1%&r"),
         CMD_HELP_LINK("cmd.help.link", "https://github.com/Eredrim/pvparena"),
 
+        CMD_AUTOJOINONE_EVENT_ONGOING("cmd.autojoinone.eventOngoing", "A PVP Event is already ongoing. Try typing /pvpjoin later."),
+
         CMD_SETOWNER_DONE("cmd.setowner.done", "&a%1%&r is now owner of arena &a%2%&r!"),
 
         CMD_SPAWN_NOTSET("cmd.spawn.notset", "Spawn not set: &a%1%&r"),
