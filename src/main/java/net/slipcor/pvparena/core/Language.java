@@ -567,6 +567,14 @@ public final class Language {
         MODULE_LATELOUNGE_WAIT("mod.latelounge.wait", "Arena will be starting soon, please wait!"),
         MODULE_LATELOUNGE_LEAVE("mod.latelounge.leave", "You have left the queue of the %1% arena."),
 
+        CMD_DUELJOIN_JOINED("cmd.dueljoin.joined", "You joined the duel queue. Waiting for opponent..."),
+        CMD_DUELJOIN_LEFT("cmd.dueljoin.left", "You left the duel queue."),
+        CMD_DUELJOIN_MATCH_FOUND("cmd.dueljoin.matchFound", "Match found! Joining arena %1%..."),
+        CMD_DUELJOIN_PLAYER_JOINED("cmd.dueljoin.playerJoined", "Player %1% joined the queue. Queue size: %2%"),
+        CMD_DUELJOIN_NO_ARENAS("cmd.dueljoin.noArenas", "No duel arenas available at the moment. Please try again later."),
+        CMD_DUELJOIN_TIMEOUT("cmd.dueljoin.timeout", "You were removed from the duel queue due to timeout (6 minutes)."),
+        CMD_DUELJOIN_LEFT_ARENA_JOIN("cmd.dueljoin.leftArenaJoin", "You left the duel queue because you joined another arena."),
+
         MODULE_PLAYERFINDER_NEAR("mod.playerfinder.near", "Nearest player: %1% blocks!"),
         MODULE_PLAYERFINDER_POINT("mod.playerfinder.point", "Compass pointing to nearest player!"),
 

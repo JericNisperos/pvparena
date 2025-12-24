@@ -9,6 +9,8 @@ import net.slipcor.pvparena.commands.PAA_Edit;
 import net.slipcor.pvparena.core.Config.CFG;
 import net.slipcor.pvparena.core.Language.MSG;
 import net.slipcor.pvparena.core.StringUtils;
+import net.slipcor.pvparena.commands.PAG_DuelJoin;
+import net.slipcor.pvparena.events.PAJoinEvent;
 import net.slipcor.pvparena.events.goal.PAGoalEvent;
 import net.slipcor.pvparena.exceptions.GameplayException;
 import net.slipcor.pvparena.loadables.ArenaModule;
@@ -451,6 +453,15 @@ public class PlayerListener implements Listener {
         } else {
             arenaPlayer.unload();
         }
+        
+        // Clear duel queue on disconnect
+        PAG_DuelJoin.clearQueueOnDisconnect(player.getUniqueId());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public static void onArenaJoin(final PAJoinEvent event) {
+        // Clear duel queue if player joins any arena
+        PAG_DuelJoin.clearQueueOnArenaJoin(event.getPlayer().getUniqueId());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
