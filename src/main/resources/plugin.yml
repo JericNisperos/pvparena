@@ -40,6 +40,7 @@ permissions:
             pvparena.cmds.shutup: true
             pvparena.cmds.stats: true
             pvparena.cmds.dueljoin: true
+            pvparena.cmds.vanillajoin: true
     pvparena.admin:
         description: Allows you to administrate arenas
         default: op
@@ -241,6 +242,9 @@ permissions:
         default: true
     pvparena.cmds.dueljoin:
         description: Allows you to run /pvparena dueljoin
+        default: true
+    pvparena.cmds.vanillajoin:
+        description: Allows you to run /pvparena vanillajoin
         default: true
     pvparena.cmds.version:
         description: Allows you to run /pvparena version
