@@ -13,9 +13,12 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static net.slipcor.pvparena.config.Debugger.debug;
@@ -25,8 +28,10 @@ import static net.slipcor.pvparena.config.Debugger.debug;
  * <p/>
  * A command to automatically join an enabled arena that starts with "vanilla":
  * - Only joins arenas whose names start with "vanilla" (case-insensitive)
+ * - If no arenas started: randomly select from available vanilla arenas
  * - If arena has players: join that arena
- * - If no arenas have players: randomly select from available vanilla arenas
+ * - If arena has ongoing fight: cancel and show message
+ * - Excludes the last arena the player was in to avoid repeating
  *
  * @author slipcor
  * @version v0.10.2
@@ -37,6 +42,9 @@ public class PAG_VanillaJoin extends AbstractGlobalCommand {
     private static final String VANILLAJOIN = "vanillajoin";
     private static final String VANILLAJOIN_SHORT = "-vj";
     private static final String VANILLA_PREFIX = "vanilla";
+    
+    // Track the last arena each player was in to avoid repeating
+    private static final Map<UUID, String> lastArenaMap = new HashMap<>();
 
     public PAG_VanillaJoin() {
         super(new String[]{CMD_VANILLAJOIN_PERM});
@@ -68,6 +76,9 @@ public class PAG_VanillaJoin extends AbstractGlobalCommand {
             return;
         }
 
+        // Get the last arena this player was in (to exclude it)
+        final String lastArenaName = lastArenaMap.get(player.getUniqueId());
+
         // Get all enabled arenas that start with "vanilla" and the player can join
         final Set<Arena> availableArenas = ArenaManager.getArenas().stream()
                 .filter(arena -> {
@@ -78,6 +89,12 @@ public class PAG_VanillaJoin extends AbstractGlobalCommand {
 
                     // Only include arenas that start with "vanilla" (case-insensitive)
                     if (!arena.getName().toLowerCase().startsWith(VANILLA_PREFIX)) {
+                        return false;
+                    }
+
+                    // Exclude the last arena the player was in
+                    if (lastArenaName != null && arena.getName().equalsIgnoreCase(lastArenaName)) {
+                        debug(player, "Excluding last arena: {}", lastArenaName);
                         return false;
                     }
 
@@ -117,7 +134,45 @@ public class PAG_VanillaJoin extends AbstractGlobalCommand {
                 })
                 .collect(Collectors.toSet());
 
-        if (availableArenas.isEmpty()) {
+        // Check if any arena (not just available) has an ongoing fight (PVPEvent) - if so, cancel autojoin
+        boolean hasOngoingEvent = ArenaManager.getArenas().stream()
+                .anyMatch(Arena::isFightInProgress);
+        
+        if (hasOngoingEvent) {
+            // Cancel autojoin and show message
+            Arena.pmsg(player, MSG.CMD_AUTOJOINONE_EVENT_ONGOING);
+            debug(player, "Vanillajoin cancelled: Found arena(s) with ongoing fight");
+            return;
+        }
+
+        // If no arenas available after excluding last arena, try again without exclusion
+        Set<Arena> finalAvailableArenas = availableArenas;
+        if (availableArenas.isEmpty() && lastArenaName != null) {
+            debug(player, "No vanilla arenas available after excluding last arena, retrying without exclusion");
+            // Retry without excluding the last arena
+            finalAvailableArenas = ArenaManager.getArenas().stream()
+                    .filter(arena -> {
+                        if (arena.isLocked()) return false;
+                        // Only include arenas that start with "vanilla"
+                        if (!arena.getName().toLowerCase().startsWith(VANILLA_PREFIX)) return false;
+                        if (!PermissionManager.hasExplicitArenaPerm(player, arena, "join")) return false;
+                        if (TeamManager.isArenaFull(arena)) return false;
+                        if (arena.isFightInProgress() && !arena.getConfig().getBoolean(CFG.JOIN_ALLOW_DURING_MATCH) &&
+                                (!arena.getConfig().getBoolean(CFG.JOIN_ALLOW_REJOIN) || !arena.hasAlreadyPlayed(player.getName()))) {
+                            return false;
+                        }
+                        if (!arena.getGoal().allowsJoinInBattle() &&
+                                !arena.getConfig().getBoolean(CFG.JOIN_ALLOW_REJOIN) && arena.hasAlreadyPlayed(player.getName())) {
+                            return false;
+                        }
+                        if (!ArenaManager.checkJoinRegion(player, arena)) return false;
+                        if (net.slipcor.pvparena.regions.ArenaRegion.tooFarAway(arena, player)) return false;
+                        return true;
+                    })
+                    .collect(Collectors.toSet());
+        }
+
+        if (finalAvailableArenas.isEmpty()) {
             Arena.pmsg(player, MSG.ERROR_NO_ARENAS);
             return;
         }
@@ -125,7 +180,7 @@ public class PAG_VanillaJoin extends AbstractGlobalCommand {
         Arena selectedArena = null;
 
         // Check for arenas with players first
-        Set<Arena> arenasWithPlayers = availableArenas.stream()
+        Set<Arena> arenasWithPlayers = finalAvailableArenas.stream()
                 .filter(arena -> arena.getEveryone().size() > 0)
                 .collect(Collectors.toSet());
 
@@ -135,8 +190,8 @@ public class PAG_VanillaJoin extends AbstractGlobalCommand {
             debug(player, "Found {} vanilla arena(s) with players, selecting first one", arenasWithPlayers.size());
         } else {
             // No arenas have players, randomly select from available vanilla arenas
-            selectedArena = RandomUtils.getRandom(availableArenas, new Random());
-            debug(player, "No vanilla arenas have players, randomly selecting from {} available arena(s)", availableArenas.size());
+            selectedArena = RandomUtils.getRandom(finalAvailableArenas, new Random());
+            debug(player, "No vanilla arenas have players, randomly selecting from {} available arena(s)", finalAvailableArenas.size());
         }
         
         if (selectedArena == null) {
@@ -146,8 +201,22 @@ public class PAG_VanillaJoin extends AbstractGlobalCommand {
 
         debug(player, "Vanilla-joining arena: {}", selectedArena.getName());
 
+        // Store this arena as the last arena for this player
+        lastArenaMap.put(player.getUniqueId(), selectedArena.getName());
+        debug(player, "Stored last arena: {} for player {}", selectedArena.getName(), player.getName());
+
         // Use the existing join workflow
         WorkflowManager.handleJoin(selectedArena, player, new String[0]);
+    }
+    
+    /**
+     * Clear the last arena for a player (called when they leave an arena)
+     * This allows them to potentially rejoin the same arena if needed
+     * 
+     * @param playerUUID the UUID of the player
+     */
+    public static void clearLastArena(UUID playerUUID) {
+        lastArenaMap.remove(playerUUID);
     }
 
     @Override
