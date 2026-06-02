@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project
+        xmlns="http://maven.apache.org/POM/4.0.0"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <name>Cyan PVP Arena Modules</name>
+    <groupId>net.slipcor.pvpa.cyan</groupId>
+    <artifactId>cyan-modules</artifactId>
+    <version>2.1.1</version>
+    <packaging>pom</packaging>
+    <description>Cyan-owned PVP Arena modules (prefixed m_Cyan*). Self-contained: builds against
+        published net.slipcor:pvparena, independent of the cloned upstream pvparena_modules repo.</description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <spigot-api.version>1.18.2-R0.1-SNAPSHOT</spigot-api.version>
+        <pvparena.version>2.1.1</pvparena.version>
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>spigot-repo</id>
+            <url>https://hub.spigotmc.org/nexus/content/groups/public/</url>
+        </repository>
+        <repository>
+            <id>eredrim-repo</id>
+            <url>https://repo.eredrim.fr/repository/maven-public/</url>
+        </repository>
+    </repositories>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.spigotmc</groupId>
+                <artifactId>spigot-api</artifactId>
+                <version>${spigot-api.version}</version>
+                <type>jar</type>
+                <scope>provided</scope>
+                <exclusions>
+                    <exclusion>
+                        <groupId>net.md-5</groupId>
+                        <artifactId>bungeecord-chat</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+            <dependency>
+                <groupId>net.slipcor</groupId>
+                <artifactId>pvparena</artifactId>
+                <version>${pvparena.version}</version>
+                <type>jar</type>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains</groupId>
+                <artifactId>annotations</artifactId>
+                <version>20.1.0</version>
+                <scope>provided</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <modules>
+        <module>m_CyanVanillaJoin</module>
+        <module>m_CyanDeathFix</module>
+    </modules>
+
+    <build>
+        <defaultGoal>clean package</defaultGoal>
+        <finalName>pa_${project.artifactId}</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>17</release>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                            <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
