@@ -2,9 +2,13 @@ package net.slipcor.pvparena.modules.cyandeathfix;
 
 import net.slipcor.pvparena.PVPArena;
 import net.slipcor.pvparena.arena.Arena;
+import net.slipcor.pvparena.arena.ArenaPlayer;
+import net.slipcor.pvparena.arena.ArenaTeam;
+import net.slipcor.pvparena.compatibility.AttributeAdapter;
 import net.slipcor.pvparena.loadables.ArenaModule;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
 import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.RegisteredListener;
 
@@ -40,6 +44,9 @@ public class CyanDeathFix extends ArenaModule {
 
     static final String MODULE_NAME = "CyanDeathFix";
 
+    /** Ticks to wait after lobby join before topping health to full (lets armor/attribute modifiers settle). */
+    private static final long LOBBY_HEAL_DELAY_TICKS = 40L; // ~2 seconds
+
     private static volatile boolean registered = false;
 
     static {
@@ -66,6 +73,46 @@ public class CyanDeathFix extends ArenaModule {
     @Override
     public void onThisLoad() {
         ensureRegisteredSafely();
+    }
+
+    /**
+     * Top the joining player up to full health a short moment after they reach the lobby.
+     *
+     * <p>Core's {@code PlayerState.fullReset} sets health to the (stripped) base value on join, so a
+     * fighter whose real max-health comes from armor/attribute modifiers lands in the lobby at 20 HP
+     * and only slowly regenerates back up. If the match starts before they finish regenerating they
+     * enter the fight not fully healed. We wait {@value #LOBBY_HEAL_DELAY_TICKS} ticks for the
+     * modifiers to settle, then set health to the current max — attributes and potion effects are
+     * left untouched, we only top up the health value.</p>
+     */
+    @Override
+    public void parseJoin(final Player player, final ArenaTeam team) {
+        if (player == null) {
+            return;
+        }
+        final PVPArena plugin = PVPArena.getInstance();
+        if (plugin == null) {
+            return;
+        }
+        final Arena joinArena = this.arena;
+        Bukkit.getScheduler().runTaskLater(plugin, () -> healToFull(player, joinArena), LOBBY_HEAL_DELAY_TICKS);
+    }
+
+    /** Set the player's health to their current max, unless they already left this arena. */
+    private static void healToFull(final Player player, final Arena joinArena) {
+        if (!player.isOnline()) {
+            return;
+        }
+        // Skip if the player left (or moved arenas) before the delayed heal fired.
+        if (ArenaPlayer.fromPlayer(player).getArena() != joinArena) {
+            return;
+        }
+        try {
+            final double maxHealth = player.getAttribute(AttributeAdapter.MAX_HEALTH.getValue()).getValue();
+            player.setHealth(maxHealth);
+        } catch (final Throwable t) {
+            logger().warning("[CyanDeathFix] Could not heal " + player.getName() + " on lobby join: " + t.getMessage());
+        }
     }
 
     /** True if the given arena has this module enabled (per-arena opt-in). */

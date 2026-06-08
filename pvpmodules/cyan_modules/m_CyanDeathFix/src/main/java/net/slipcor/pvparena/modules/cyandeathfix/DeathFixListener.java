@@ -35,13 +35,20 @@ import java.util.concurrent.ConcurrentHashMap;
  *         no death screen, routed as a normal arena death. This is the common path and covers
  *         cactus, fire, lava, drowning, suffocation, poison, wither, lightning, gradual void, fall…</li>
  *     <li><b>Safety net</b> ({@code PlayerDeathEvent} @ LOWEST): for the rarer event-less kills
- *         ({@code /kill}, {@code setHealth(0)}, void hard-kill) the player already died — we
- *         <b>count the death and credit the killer</b> via {@code handlePlayerDeath} (which runs
- *         {@code setStatus(DEAD)} + {@code StatisticsManager.kill} before any teleport), then skip
- *         the death screen. Note: core's {@code onPlayerRespawn} force-leaves arena players on any
- *         real respawn, so a module cannot make these respawn back into the arena — the death is
- *         counted, then the player exits (correct for elimination goals; a limitation for respawning
- *         goals on these exotic causes).</li>
+ *         ({@code /kill}, {@code setHealth(0)}, void hard-kill) the player already died — for an
+ *         active fighter we <b>count the death and credit the killer</b> via {@code handlePlayerDeath}
+ *         (which runs {@code setStatus(DEAD)} + {@code StatisticsManager.kill} before any teleport),
+ *         then force the respawn next tick to skip the death screen. Note: core's
+ *         {@code onPlayerRespawn} force-leaves arena players on any real respawn, so a module cannot
+ *         make these respawn back into the arena — the death is counted, then the player exits
+ *         (correct for elimination goals; a limitation for respawning goals on these exotic causes).
+ *         <p>The net also covers deaths during the <b>END cooldown</b> and while already
+ *         lost/spectating ({@code DEAD}/{@code LOST}/{@code WATCH}): those are <i>not</i> re-counted
+ *         (the fight is over), but the player is still force-respawned immediately so the exit happens
+ *         before the {@code EndRunnable}'s {@code reset()} fires. That ordering matters — if reset()
+ *         runs first it restores the player's {@code PlayerState} onto a still-dead body and the later
+ *         respawn clobbers it, stranding the player at base 20 HP, unable to eat or attack, and
+ *         seemingly still inside the arena.</p></li>
  * </ul>
  */
 public class DeathFixListener implements Listener {
@@ -122,13 +129,23 @@ public class DeathFixListener implements Listener {
         if (!CyanDeathFix.isEnabledFor(arena)) {
             return;
         }
-        // A real death of an active fighter means core's fake-death was bypassed.
-        if (aPlayer.getStatus() != PlayerStatus.FIGHT) {
+        // Act on any player still attached to the arena's playing/spectating area. This deliberately
+        // includes DEAD/LOST/WATCH (and FIGHT during the END cooldown), not just active FIGHT: a real
+        // death during the post-fight reset cooldown is the bug this fixes. Lobby states
+        // (LOUNGE/READY/WARM) and already-out states (NULL/OFFLINE) are left to core.
+        final PlayerStatus status = aPlayer.getStatus();
+        if (!isInArenaArea(status)) {
             return;
         }
         if (!this.handlingDeath.add(player.getUniqueId())) {
             return; // already being handled (defensive against duplicate listeners)
         }
+
+        // Only a mid-fight death needs the death counted + killer credited. A death during the END
+        // cooldown (realEndRunner != null) or while already lost/spectating must NOT be re-counted —
+        // the fight is already over — it only needs the player to exit cleanly. The pre-emption
+        // handler disables itself while realEndRunner != null, so those deaths land here as real ones.
+        final boolean activeFighter = status == PlayerStatus.FIGHT && arena.realEndRunner == null;
 
         try {
             // Don't let vanilla scatter items / exp; the arena's death handling governs that.
@@ -137,29 +154,47 @@ public class DeathFixListener implements Listener {
             event.setKeepLevel(true);
             event.setDroppedExp(0);
 
-            final EntityDamageEvent deathEvent = resolveDeathEvent(player, player.getLastDamageCause());
-            if (deathEvent != null) {
-                // Count the death + credit the killer NOW, while the player is still in the arena.
-                // handlePlayerDeath sets status DEAD and registers the kill before any teleport, so
-                // the death/kill is recorded even though core will subsequently force-leave the
-                // player on respawn (a module cannot prevent that without editing core).
-                WorkflowManager.handlePlayerDeath(arena, player, deathEvent);
-            } else {
-                CyanDeathFix.logger().warning("[CyanDeathFix] No damage event available for "
-                        + player.getName() + "'s true death; could not route it into the arena.");
+            if (activeFighter) {
+                final EntityDamageEvent deathEvent = resolveDeathEvent(player, player.getLastDamageCause());
+                if (deathEvent != null) {
+                    // Count the death + credit the killer NOW, while the player is still in the arena.
+                    // handlePlayerDeath sets status DEAD and registers the kill before any teleport.
+                    WorkflowManager.handlePlayerDeath(arena, player, deathEvent);
+                } else {
+                    CyanDeathFix.logger().warning("[CyanDeathFix] No damage event available for "
+                            + player.getName() + "'s true death; could not route it into the arena.");
+                }
             }
         } catch (final Throwable t) {
             CyanDeathFix.logger().warning("[CyanDeathFix] Error routing true death for "
                     + player.getName() + ": " + t.getMessage());
         }
 
-        // Skip the death screen next tick. Core's onPlayerRespawn then cleanly removes the player.
+        // Force the respawn next tick (skips the death screen). This is the crucial step for
+        // end-phase deaths: it fires long before the EndRunnable's reset() at the end of the cooldown,
+        // so core's onPlayerRespawn runs playerLeave while the arena is still attached AND the player
+        // is alive again -- so PlayerState (max-health attribute, food, gamemode, potion effects, ...)
+        // is restored onto a LIVE player. Letting reset() run first instead restores that state onto a
+        // still-dead player, which the later respawn clobbers: that is what left the player at base
+        // 20 HP, unable to eat or hit, and seemingly still inside the arena.
         Bukkit.getScheduler().runTask(PVPArena.getInstance(), () -> {
             this.handlingDeath.remove(player.getUniqueId());
             if (player.isOnline() && player.isDead()) {
                 player.spigot().respawn();
             }
         });
+    }
+
+    /**
+     * True for statuses where the player is still attached to the arena's playing/spectating area and
+     * a real death must be routed into a clean arena exit. Lobby states (LOUNGE/READY/WARM) and
+     * already-out states (NULL/OFFLINE) are intentionally excluded.
+     */
+    private static boolean isInArenaArea(final PlayerStatus status) {
+        return status == PlayerStatus.FIGHT
+                || status == PlayerStatus.DEAD
+                || status == PlayerStatus.LOST
+                || status == PlayerStatus.WATCH;
     }
 
     // ---- Housekeeping --------------------------------------------------------------------------

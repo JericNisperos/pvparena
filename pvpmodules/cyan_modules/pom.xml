@@ -63,6 +63,9 @@
     <modules>
         <module>m_CyanVanillaJoin</module>
         <module>m_CyanDeathFix</module>
+        <module>m_CyanGladiator</module>
+        <module>m_CyanGladiatorMod</module>
+        <module>m_CyanGuildWarChallenge</module>
     </modules>
 
     <build>
