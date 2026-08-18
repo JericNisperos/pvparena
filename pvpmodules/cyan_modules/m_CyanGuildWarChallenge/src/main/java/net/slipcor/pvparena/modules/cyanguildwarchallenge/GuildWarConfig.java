@@ -28,7 +28,7 @@ import java.util.logging.Logger;
  *   <tr><td>{@code arena-prefix}</td><td>guildwar</td><td>arenas whose name starts with this are GuildWar (challenge-only)</td></tr>
  *   <tr><td>{@code min-count}</td><td>1</td><td>floor on the per-side player count of a challenge</td></tr>
  *   <tr><td>{@code max-count}</td><td>10</td><td>hard cap on the per-side player count</td></tr>
- *   <tr><td>{@code cooldown-seconds}</td><td>0</td><td>per-guild wait between issuing challenges (0 = none)</td></tr>
+ *   <tr><td>{@code cooldown-hours}</td><td>24</td><td>hours a guild is locked out of Guild Wars after a loss; also blocks inviting a guild still on cooldown (0 = none, fractional allowed)</td></tr>
  *   <tr><td>{@code accept-roles}</td><td>leader, viceleader, quartermaster, diplomat</td><td>clan roles allowed to accept/deny/cancel</td></tr>
  *   <tr><td>{@code join-roles}</td><td>(empty)</td><td>clan roles allowed to join a roster; empty = any member</td></tr>
  *   <tr><td>{@code role-fallback-allow-any-member}</td><td>true</td><td>when a player's role can't be read, fall back to allowing any guild member</td></tr>
@@ -48,7 +48,7 @@ final class GuildWarConfig {
     private static final String DEF_PREFIX = "guildwar";
     private static final int DEF_MIN_COUNT = 1;
     private static final int DEF_MAX_COUNT = 10;
-    private static final int DEF_COOLDOWN = 0;
+    private static final double DEF_COOLDOWN_HOURS = 24.0;
     private static final boolean DEF_ROLE_FALLBACK = true;
     private static final List<String> DEF_ACCEPT_ROLES = Arrays.asList(
             "leader", "viceleader", "quartermaster", "diplomat");
@@ -67,7 +67,7 @@ final class GuildWarConfig {
     private String arenaPrefix = DEF_PREFIX;
     private int minCount = DEF_MIN_COUNT;
     private int maxCount = DEF_MAX_COUNT;
-    private int cooldownSeconds = DEF_COOLDOWN;
+    private double cooldownHours = DEF_COOLDOWN_HOURS;
     private boolean roleFallbackAllowAnyMember = DEF_ROLE_FALLBACK;
     private Set<String> acceptRoles = normalizeRoles(DEF_ACCEPT_ROLES);
     private Set<String> joinRoles = normalizeRoles(DEF_JOIN_ROLES);
@@ -105,7 +105,7 @@ final class GuildWarConfig {
         this.stagingTimeoutSeconds = positive(yaml.getInt("staging-timeout-seconds", DEF_STAGING_TIMEOUT), DEF_STAGING_TIMEOUT);
         this.maxCount = positive(yaml.getInt("max-count", DEF_MAX_COUNT), DEF_MAX_COUNT);
         this.minCount = clamp(yaml.getInt("min-count", DEF_MIN_COUNT), 1, this.maxCount);
-        this.cooldownSeconds = Math.max(0, yaml.getInt("cooldown-seconds", DEF_COOLDOWN));
+        this.cooldownHours = Math.max(0.0, yaml.getDouble("cooldown-hours", DEF_COOLDOWN_HOURS));
         this.roleFallbackAllowAnyMember = yaml.getBoolean("role-fallback-allow-any-member", DEF_ROLE_FALLBACK);
 
         this.acceptRoles = normalizeRoles(yaml.getStringList("accept-roles"));
@@ -152,8 +152,9 @@ final class GuildWarConfig {
         return this.maxCount;
     }
 
-    int cooldownSeconds() {
-        return this.cooldownSeconds;
+    /** Post-loss cooldown duration in hours (may be fractional; 0 = no cooldown). */
+    double cooldownHours() {
+        return this.cooldownHours;
     }
 
     boolean roleFallbackAllowAnyMember() {
@@ -220,7 +221,7 @@ final class GuildWarConfig {
         changed |= setIfAbsent(yaml, "arena-prefix", DEF_PREFIX);
         changed |= setIfAbsent(yaml, "min-count", DEF_MIN_COUNT);
         changed |= setIfAbsent(yaml, "max-count", DEF_MAX_COUNT);
-        changed |= setIfAbsent(yaml, "cooldown-seconds", DEF_COOLDOWN);
+        changed |= setIfAbsent(yaml, "cooldown-hours", DEF_COOLDOWN_HOURS);
         changed |= setIfAbsent(yaml, "accept-roles", DEF_ACCEPT_ROLES);
         changed |= setIfAbsent(yaml, "join-roles", DEF_JOIN_ROLES);
         changed |= setIfAbsent(yaml, "role-fallback-allow-any-member", DEF_ROLE_FALLBACK);
@@ -248,8 +249,9 @@ final class GuildWarConfig {
                 + "arena-prefix: arenas whose name starts with this are GuildWar (challenge-only) arenas.\n"
                 + "min-count: floor on the per-side player count a challenger may request (>= 1, <= max-count).\n"
                 + "max-count: hard cap on the per-side player count of a challenge.\n"
-                + "cooldown-seconds: a guild must wait this long after issuing a challenge before it can\n"
-                + "  issue another one (0 = no cooldown).\n"
+                + "cooldown-hours: after LOSING a Guild War, a guild is locked out for this many hours -\n"
+                + "  it can't issue an invite, and other guilds can't invite it, until it elapses. Persisted\n"
+                + "  in cyan_guildwarchallenge_cooldowns.yml. May be fractional (e.g. 0.5 = 30 min); 0 = none.\n"
                 + "accept-roles: clan roles allowed to accept / deny / cancel a challenge on a guild's behalf.\n"
                 + "join-roles: clan roles allowed to join a war roster. Leave EMPTY to let any member join.\n"
                 + "role-fallback-allow-any-member: if a player's clan role can't be read from UltimateClans,\n"

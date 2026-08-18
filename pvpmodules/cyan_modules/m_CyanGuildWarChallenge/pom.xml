@@ -12,6 +12,13 @@
 
     <name>PVP Arena Modules - CyanGuildWarChallenge</name>
 
+    <repositories>
+        <repository>
+            <id>PlaceholderAPI</id>
+            <url>https://repo.helpch.at/releases/</url>
+        </repository>
+    </repositories>
+
     <dependencies>
         <dependency>
             <groupId>org.spigotmc</groupId>
@@ -23,6 +30,20 @@
             <groupId>net.slipcor</groupId>
             <artifactId>pvparena</artifactId>
             <type>jar</type>
+        </dependency>
+        <!-- Optional soft-hook: only used when PlaceholderAPI is installed (never bundled). -->
+        <dependency>
+            <groupId>me.clip</groupId>
+            <artifactId>placeholderapi</artifactId>
+            <version>2.11.6</version>
+            <scope>provided</scope>
+            <exclusions>
+                <!-- We don't annotate with JetBrains annotations; keep the build dep-light. -->
+                <exclusion>
+                    <groupId>org.jetbrains</groupId>
+                    <artifactId>annotations</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 </project>

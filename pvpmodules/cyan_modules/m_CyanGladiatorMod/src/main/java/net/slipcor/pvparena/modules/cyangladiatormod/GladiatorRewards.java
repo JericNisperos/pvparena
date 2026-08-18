@@ -1,7 +1,6 @@
 package net.slipcor.pvparena.modules.cyangladiatormod;
 
 import net.slipcor.pvparena.PVPArena;
-import net.slipcor.pvparena.arena.Arena;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
@@ -11,42 +10,32 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Runs the winning guild's command rewards (EventActions-style {@code prefix<=>command}).
+ * Runs a guild's command rewards for a finished rumble (EventActions-style {@code prefix<=>command}).
  *
- * <p>Config (per arena, scaffolded by {@link GladiatorMod}):</p>
- * <pre>
- * modules:
- *   gladiatormod:
- *     rewardScope: PARTICIPANTS   # or ALL_MEMBERS
- *     winnerCommands:
- *       - "console&lt;=&gt;eco give %player% 1000"
- *       - "console&lt;=&gt;broadcast Guild %guild% won the Gladiator in %arena%!"
- *       - "player&lt;=&gt;spawn"
- * </pre>
- * Placeholders: {@code %player%} (per recipient), {@code %guild%} (tag), {@code %arena%}. Entries
- * containing {@code %player%} run once per recipient; otherwise once.
+ * <p>Reads {@link GladiatorConfig}: {@code winner-commands} for the surviving guild,
+ * {@code participation-commands} for every other guild that took part, and {@code reward-scope}
+ * ({@code PARTICIPANTS} = that guild's fighters, {@code ALL_MEMBERS} = every online member).</p>
+ *
+ * <p>Placeholders: {@code %player%} (per recipient), {@code %guild%} (this guild's tag),
+ * {@code %winner%} (the winning guild's tag), {@code %arena%}. Entries containing {@code %player%}
+ * run once per recipient; otherwise once.</p>
  */
 final class GladiatorRewards {
 
-    static final String CMDS_PATH = "modules.gladiatormod.winnerCommands";
-    static final String SCOPE_PATH = "modules.gladiatormod.rewardScope";
     private static final String SPLIT = "<=>";
 
     private GladiatorRewards() {
     }
 
-    static void run(final Arena arena, final UUID winningGuildId, final String guildTag,
-                    final Set<UUID> participantIds) {
-        final List<String> commands = arena.getConfig().getStringList(CMDS_PATH, new ArrayList<>());
+    static void run(final String arenaName, final List<String> commands, final UUID guildId,
+                    final String guildTag, final String winnerTag, final Set<UUID> participantIds) {
         if (commands == null || commands.isEmpty()) {
             return;
         }
-
-        final Object scopeRaw = safeUnsafe(arena, SCOPE_PATH);
-        final boolean allMembers = scopeRaw != null && "ALL_MEMBERS".equalsIgnoreCase(scopeRaw.toString());
-
-        final List<Player> recipients = resolveRecipients(allMembers, winningGuildId, participantIds);
+        final boolean allMembers = GladiatorConfig.get().rewardAllMembers();
+        final List<Player> recipients = resolveRecipients(allMembers, guildId, participantIds);
         final String tag = guildTag != null ? guildTag : "";
+        final String winner = winnerTag != null ? winnerTag : "";
 
         for (final String entry : commands) {
             final int idx = entry.indexOf(SPLIT);
@@ -55,11 +44,11 @@ final class GladiatorRewards {
 
             if (rawCommand.contains("%player%")) {
                 for (final Player recipient : recipients) {
-                    dispatch(prefix, recipient, substitute(rawCommand, recipient.getName(), tag, arena.getName()));
+                    dispatch(prefix, recipient, substitute(rawCommand, recipient.getName(), tag, winner, arenaName));
                 }
             } else {
                 final Player who = recipients.isEmpty() ? null : recipients.get(0);
-                dispatch(prefix, who, substitute(rawCommand, who != null ? who.getName() : "", tag, arena.getName()));
+                dispatch(prefix, who, substitute(rawCommand, who != null ? who.getName() : "", tag, winner, arenaName));
             }
         }
     }
@@ -81,10 +70,11 @@ final class GladiatorRewards {
     }
 
     private static String substitute(final String command, final String playerName, final String tag,
-                                     final String arenaName) {
+                                     final String winnerTag, final String arenaName) {
         return command
                 .replace("%player%", playerName)
                 .replace("%guild%", tag)
+                .replace("%winner%", winnerTag)
                 .replace("%arena%", arenaName);
     }
 
@@ -99,15 +89,7 @@ final class GladiatorRewards {
             }
         } catch (final Throwable t) {
             PVPArena.getInstance().getLogger()
-                    .warning("[GladiatorMod] reward command failed ('" + command + "'): " + t.getMessage());
-        }
-    }
-
-    private static Object safeUnsafe(final Arena arena, final String path) {
-        try {
-            return arena.getConfig().getUnsafe(path);
-        } catch (final Throwable t) {
-            return null;
+                    .warning("[Gladiator] reward command failed ('" + command + "'): " + t.getMessage());
         }
     }
 }

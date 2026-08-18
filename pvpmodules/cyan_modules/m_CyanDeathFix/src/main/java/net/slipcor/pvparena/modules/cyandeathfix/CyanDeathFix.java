@@ -91,8 +91,8 @@ public class CyanDeathFix extends ArenaModule {
             return;
         }
         final PVPArena plugin = PVPArena.getInstance();
-        if (plugin == null) {
-            return;
+        if (plugin == null || plugin.isShuttingDown()) {
+            return; // stopping: scheduling against a disabled plugin throws
         }
         final Arena joinArena = this.arena;
         Bukkit.getScheduler().runTaskLater(plugin, () -> healToFull(player, joinArena), LOBBY_HEAL_DELAY_TICKS);

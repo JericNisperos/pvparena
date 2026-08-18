@@ -34,16 +34,22 @@ final class GuildWarMessages {
         }
     }
 
-    /** DM the challenged-guild member an {@code [Accept] [Deny]} prompt. */
-    static void sendAcceptPrompt(final Player to, final String challengerLabel, final int count) {
+    /** DM the challenged-guild member an {@code [Accept] [Deny]} prompt for a {@code gamemodeLabel} war. */
+    static void sendAcceptPrompt(final Player to, final String challengerLabel, final int count,
+                                 final String gamemodeLabel) {
         final String lead = PREFIX + ChatColor.YELLOW + challengerLabel + ChatColor.GRAY
-                + " challenged your guild to a " + ChatColor.WHITE + count + "v" + count + ChatColor.GRAY + ". ";
+                + " challenged your guild to a " + ChatColor.WHITE + count + "v" + count
+                + ChatColor.GRAY + " " + ChatColor.AQUA + gamemodeLabel + ChatColor.GRAY + " war. ";
         final List<Button> buttons = new ArrayList<>();
         buttons.add(new Button("[Accept]", "green", "/guildwar accept", "Accept the challenge"));
         buttons.add(new Button(" ", null, null, null));
         buttons.add(new Button("[Deny]", "red", "/guildwar deny", "Deny the challenge"));
         sendClickable(to, lead, buttons);
         sendHint(to, "/guildwar accept", "/guildwar deny");
+        if (to != null) {
+            to.sendMessage(ChatColor.DARK_GRAY + "Want a different mode? Counter with your own "
+                    + ChatColor.GRAY + "/guildwar invite <guild> <count> [mode]");
+        }
     }
 
     /** DM a guild member a {@code [Join the Guild War]} prompt during staging. */

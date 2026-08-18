@@ -32,6 +32,8 @@ final class Challenge {
     final String teamBName;
     final int count;
     final UUID challengerId;
+    /** Gamemode label this war is fought under (the arena-name suffix; see {@link GuildWarArenas#gamemodeOf}). */
+    final String gamemode;
 
     final Set<UUID> rosterA = new LinkedHashSet<>();
     final Set<UUID> rosterB = new LinkedHashSet<>();
@@ -44,7 +46,8 @@ final class Challenge {
     GuildWarCountdown countdown;
 
     Challenge(final String arenaName, final UUID guildA, final UUID guildB,
-              final String teamAName, final String teamBName, final int count, final UUID challengerId) {
+              final String teamAName, final String teamBName, final int count, final UUID challengerId,
+              final String gamemode) {
         this.arenaName = arenaName;
         this.guildA = guildA;
         this.guildB = guildB;
@@ -52,6 +55,7 @@ final class Challenge {
         this.teamBName = teamBName;
         this.count = count;
         this.challengerId = challengerId;
+        this.gamemode = gamemode;
     }
 
     /** {@code 'A'} if the guild is the challenger, {@code 'B'} if the enemy, else {@code 0}. */

@@ -66,6 +66,19 @@
         <module>m_CyanGladiator</module>
         <module>m_CyanGladiatorMod</module>
         <module>m_CyanGuildWarChallenge</module>
+        <module>m_CyanVillageDefense</module>
+        <module>m_CyanShrinkingBorder</module>
+        <module>m_CyanRoundTeamLives</module>
+        <module>m_CyanZoneCapture</module>
+        <module>m_CyanVIP</module>
+        <module>m_CyanRoyaltyDefense</module>
+        <module>m_CyanChestFiller</module>
+        <module>m_CyanFinalDeathDrop</module>
+        <module>m_CyanSpectatorGuard</module>
+        <module>m_CyanPowerups</module>
+        <module>m_CyanSpectate</module>
+        <module>m_CyanInvisibilityFix</module>
+        <module>m_CyanAirdrop</module>
     </modules>
 
     <build>

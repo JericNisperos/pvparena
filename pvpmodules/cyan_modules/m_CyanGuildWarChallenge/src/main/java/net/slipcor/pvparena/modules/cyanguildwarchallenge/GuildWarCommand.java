@@ -26,7 +26,7 @@ import java.util.UUID;
  * module's {@code /cyangpa}.
  *
  * <pre>
- *   /guildwar invite &lt;guild&gt; &lt;count&gt;   issue a challenge
+ *   /guildwar invite &lt;guild&gt; &lt;count&gt; [gamemode]   issue a challenge (gamemode optional; random if omitted)
  *   /guildwar accept | deny             respond to a challenge targeting your guild (officers only)
  *   /guildwar join | leave              join / leave your guild's roster during staging
  *   /guildwar cancel                    challenger cancels their own pending/staging war
@@ -198,12 +198,12 @@ public class GuildWarCommand extends Command {
                 GuildWarChallenge.debug(player);
                 return true;
             case SUB_INVITE:
-                // Challenge: /guildwar invite <guild> <count>
+                // Challenge: /guildwar invite <guild> <count> [gamemode]
                 if (args.length < 3) {
                     sendUsage(sender);
                     return true;
                 }
-                GuildWarChallenge.challenge(player, args[1], args[2]);
+                GuildWarChallenge.challenge(player, args[1], args[2], args.length > 3 ? args[3] : null);
                 return true;
             default:
                 sendUsage(sender);
@@ -224,8 +224,9 @@ public class GuildWarCommand extends Command {
         try {
             GuildWarConfig.get().load();
             GuildWarResultStore.get().load();
+            GuildWarCooldownStore.get().load();
             GuildBridge.invalidate();
-            sender.sendMessage(ChatColor.GREEN + "[GuildWar] Config and results reloaded from disk.");
+            sender.sendMessage(ChatColor.GREEN + "[GuildWar] Config, results and cooldowns reloaded from disk.");
         } catch (final Throwable t) {
             sender.sendMessage(ChatColor.RED + "[GuildWar] Reload failed: " + t.getMessage());
             CyanGuildWarChallenge.logger().warning("[GuildWarChallenge] /guildwar reload failed: " + t.getMessage());
@@ -319,6 +320,18 @@ public class GuildWarCommand extends Command {
             }
             return out;
         }
+
+        // /guildwar invite <guild> <count> <gamemode> — suggest gamemodes with a free arena right now.
+        if (args.length == 4 && SUB_INVITE.equals(args[0].toLowerCase(Locale.ROOT))) {
+            final String prefix = args[3].toLowerCase(Locale.ROOT);
+            final List<String> out = new ArrayList<>();
+            for (final String mode : GuildWarArenas.availableGamemodes()) {
+                if (!mode.isEmpty() && mode.startsWith(prefix)) {
+                    out.add(mode);
+                }
+            }
+            return out;
+        }
         return Collections.emptyList();
     }
 
@@ -342,7 +355,7 @@ public class GuildWarCommand extends Command {
 
     private void sendUsage(final CommandSender sender) {
         sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                "&eUsage: &r/" + LABEL + " invite <guild> <count> &7| accept | deny | join | leave | cancel | spectate | top"));
+                "&eUsage: &r/" + LABEL + " invite <guild> <count> [gamemode] &7| accept | deny | join | leave | cancel | spectate | top"));
         if (isAdmin(sender)) {
             sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
                     "&7Admin: &r/" + LABEL + " reload &7(config+results) &r| reinstall &7(reload module jars)"));

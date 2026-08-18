@@ -177,12 +177,18 @@ public class DeathFixListener implements Listener {
         // is restored onto a LIVE player. Letting reset() run first instead restores that state onto a
         // still-dead player, which the later respawn clobbers: that is what left the player at base
         // 20 HP, unable to eat or hit, and seemingly still inside the arena.
-        Bukkit.getScheduler().runTask(PVPArena.getInstance(), () -> {
+        try {
+            Bukkit.getScheduler().runTask(PVPArena.getInstance(), () -> {
+                this.handlingDeath.remove(player.getUniqueId());
+                if (player.isOnline() && player.isDead()) {
+                    player.spigot().respawn();
+                }
+            });
+        } catch (final Throwable t) {
+            // Server stopping: scheduling against a disabled plugin throws. Drop the re-entrancy
+            // guard here instead, or this player's deaths would be ignored for the rest of the session.
             this.handlingDeath.remove(player.getUniqueId());
-            if (player.isOnline() && player.isDead()) {
-                player.spigot().respawn();
-            }
-        });
+        }
     }
 
     /**

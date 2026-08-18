@@ -11,10 +11,9 @@ import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -44,12 +43,6 @@ final class GuildWarChallenge {
      */
     private static final Set<UUID> RELOCATING = new HashSet<>();
 
-    /**
-     * Per-guild timestamp (epoch millis) of the last challenge that guild successfully issued, for the
-     * {@code cooldown-seconds} gate. Keyed by the challenger's guild UUID; entries simply age out.
-     */
-    private static final Map<UUID, Long> LAST_CHALLENGE_AT = new HashMap<>();
-
     private GuildWarChallenge() {
     }
 
@@ -59,7 +52,8 @@ final class GuildWarChallenge {
 
     // ------------------------------------------------------------------------------------ challenge
 
-    static void challenge(final Player player, final String guildQuery, final String countStr) {
+    static void challenge(final Player player, final String guildQuery, final String countStr,
+                          final String gamemodeArg) {
         ChallengeRegistry.sweepStale(); // heal any leaked claim before the "already in a war" checks
         final GuildBridge guilds = GuildBridge.get();
         if (!guilds.isAvailable()) {
@@ -79,15 +73,10 @@ final class GuildWarChallenge {
             GuildWarMessages.send(player, ChatColor.RED + "You're already in an arena — leave it first.");
             return;
         }
-        if (ChallengeRegistry.byGuild(ownGuild) != null) {
-            GuildWarMessages.send(player, ChatColor.RED + "Your guild is already in a Guild War.");
-            return;
-        }
-        final long cooldownRemaining = cooldownRemainingSeconds(ownGuild);
-        if (cooldownRemaining > 0) {
-            GuildWarMessages.send(player, ChatColor.RED + "Your guild must wait "
-                    + ChatColor.YELLOW + cooldownRemaining + ChatColor.RED
-                    + "s before issuing another Guild War challenge.");
+        final long ownCooldown = cooldownRemainingMillis(ownGuild);
+        if (ownCooldown > 0) {
+            GuildWarMessages.send(player, ChatColor.RED + "Your guild is on cooldown after a recent Guild War loss — wait "
+                    + ChatColor.YELLOW + formatDuration(ownCooldown) + ChatColor.RED + " before challenging again.");
             return;
         }
 
@@ -100,8 +89,33 @@ final class GuildWarChallenge {
             GuildWarMessages.send(player, ChatColor.RED + "You can't challenge your own guild.");
             return;
         }
-        if (ChallengeRegistry.byGuild(enemyGuild) != null) {
-            GuildWarMessages.send(player, ChatColor.RED + "That guild is already in a Guild War.");
+        // "Already in a war" gates — with a counter-invite exception: if THIS enemy already has a
+        // PENDING challenge out against US (we're its side-B target), our invite replaces theirs. The
+        // old one is auto-denied so two guilds never have two live challenges between them. Anyone who
+        // could deny can instead counter with their preferred gamemode by sending their own invite.
+        final Challenge ownExisting = ChallengeRegistry.byGuild(ownGuild);
+        final Challenge enemyExisting = ChallengeRegistry.byGuild(enemyGuild);
+        final boolean counterInvite = ownExisting != null && ownExisting == enemyExisting
+                && ownExisting.state == Challenge.State.PENDING
+                && ownExisting.sideOfGuild(enemyGuild) == 'A';
+        if (counterInvite) {
+            cancelChallenge(ownExisting, ChatColor.YELLOW + GuildWarText.guildLabel(ownGuild)
+                    + ChatColor.GOLD + " declined and sent their own challenge instead.");
+        } else {
+            if (ownExisting != null) {
+                GuildWarMessages.send(player, ChatColor.RED + "Your guild is already in a Guild War.");
+                return;
+            }
+            if (enemyExisting != null) {
+                GuildWarMessages.send(player, ChatColor.RED + "That guild is already in a Guild War.");
+                return;
+            }
+        }
+        final long enemyCooldown = cooldownRemainingMillis(enemyGuild);
+        if (enemyCooldown > 0) {
+            GuildWarMessages.send(player, ChatColor.YELLOW + GuildWarText.guildLabel(enemyGuild) + ChatColor.RED
+                    + " is on cooldown after a recent Guild War loss — try again in "
+                    + ChatColor.YELLOW + formatDuration(enemyCooldown) + ChatColor.RED + ".");
             return;
         }
 
@@ -135,9 +149,28 @@ final class GuildWarChallenge {
             return;
         }
 
-        final Arena arena = GuildWarArenas.findAvailable();
+        // Resolve the gamemode (the arena-name suffix, e.g. "domination" -> guildwardomination*). An
+        // explicit arg must match a configured GuildWar arena; omitted rolls a random gamemode that
+        // currently has a free arena, announced up front so the challenged guild knows what they're in.
+        String gamemode = gamemodeArg == null ? null : gamemodeArg.toLowerCase(Locale.ROOT);
+        if (gamemode != null) {
+            if (!GuildWarArenas.gamemodeExists(gamemode)) {
+                GuildWarMessages.send(player, ChatColor.RED + "Unknown gamemode " + ChatColor.YELLOW + gamemodeArg
+                        + ChatColor.RED + ". Available: " + ChatColor.WHITE + gamemodeList());
+                return;
+            }
+        } else {
+            gamemode = GuildWarArenas.randomAvailableGamemode();
+            if (gamemode == null) {
+                GuildWarMessages.send(player, ChatColor.RED + "No free Guild War arena is available right now.");
+                return;
+            }
+        }
+        final Arena arena = GuildWarArenas.findAvailable(gamemode);
         if (arena == null) {
-            GuildWarMessages.send(player, ChatColor.RED + "No free Guild War arena is available right now.");
+            GuildWarMessages.send(player, ChatColor.RED + "No free " + ChatColor.YELLOW
+                    + GuildWarText.prettyGamemode(gamemode) + ChatColor.RED
+                    + " Guild War arena is available right now.");
             return;
         }
         final ArenaTeam[] teams = GuildWarArenas.twoTeams(arena);
@@ -150,21 +183,22 @@ final class GuildWarChallenge {
         // the world; we only teleport everyone in once both rosters are full (see onCountdownFinish).
         final Challenge challenge = ChallengeRegistry.open(new Challenge(
                 arena.getName(), ownGuild, enemyGuild,
-                teams[0].getName(), teams[1].getName(), count, player.getUniqueId()));
+                teams[0].getName(), teams[1].getName(), count, player.getUniqueId(), gamemode));
         challenge.rosterA.add(player.getUniqueId());
-        LAST_CHALLENGE_AT.put(ownGuild, System.currentTimeMillis());
 
         final String ownLabel = GuildWarText.guildLabel(ownGuild);
         final String enemyLabel = GuildWarText.guildLabel(enemyGuild);
+        final String modeLabel = GuildWarText.prettyGamemode(gamemode);
 
         GuildWarMessages.broadcast(ChatColor.YELLOW + ownLabel + ChatColor.GOLD + " challenged "
                 + ChatColor.YELLOW + enemyLabel + ChatColor.GOLD + " to a "
-                + ChatColor.WHITE + count + "v" + count + ChatColor.GOLD + "!");
+                + ChatColor.WHITE + count + "v" + count + ChatColor.GOLD + " "
+                + ChatColor.AQUA + modeLabel + ChatColor.GOLD + " Guild War!");
 
         // DM the enemy guild: clickable accept/deny to officers, an informational note to the rest.
         for (final Player member : guilds.onlineMembers(enemyGuild)) {
             if (guilds.canManageWar(member, enemyGuild)) {
-                GuildWarMessages.sendAcceptPrompt(member, ownLabel, count);
+                GuildWarMessages.sendAcceptPrompt(member, ownLabel, count, modeLabel);
             } else {
                 GuildWarMessages.send(member, ChatColor.GRAY + "Your guild was challenged by "
                         + ChatColor.YELLOW + ownLabel + ChatColor.GRAY + " — an officer must accept.");
@@ -205,7 +239,9 @@ final class GuildWarChallenge {
         final String aLabel = GuildWarText.guildLabel(challenge.guildA);
         final String bLabel = GuildWarText.guildLabel(challenge.guildB);
         GuildWarMessages.broadcast(ChatColor.YELLOW + bLabel + ChatColor.GREEN + " accepted "
-                + ChatColor.YELLOW + aLabel + ChatColor.GREEN + "'s challenge! Both guilds: fill your roster.");
+                + ChatColor.YELLOW + aLabel + ChatColor.GREEN + "'s " + ChatColor.AQUA
+                + GuildWarText.prettyGamemode(challenge.gamemode) + ChatColor.GREEN
+                + " challenge! Both guilds: fill your roster.");
 
         scheduleStagingTimeout(challenge);
         promptRoster(challenge, 'A');
@@ -591,24 +627,26 @@ final class GuildWarChallenge {
 
         challenge.resolved = true;
         final GuildBridge guilds = GuildBridge.get();
+        final Set<UUID> winnerRoster = new HashSet<>(challenge.roster(challenge.sideOfGuild(winnerGuild)));
+        final Set<UUID> loserRoster = new HashSet<>(challenge.roster(challenge.sideOfGuild(loserGuild)));
+
         GuildWarResultStore.get().recordResult(
-                winnerGuild, GuildWarText.sanitize(guilds.clanName(winnerGuild)),
-                loserGuild, GuildWarText.sanitize(guilds.clanName(loserGuild)));
+                winnerGuild, GuildWarText.sanitize(guilds.clanName(winnerGuild)), winnerRoster,
+                loserGuild, GuildWarText.sanitize(guilds.clanName(loserGuild)), loserRoster);
+        GuildWarCooldownStore.get().recordLoss(loserGuild, System.currentTimeMillis());
         GuildWarMessages.broadcast(ChatColor.YELLOW + GuildWarText.guildLabel(winnerGuild)
                 + ChatColor.GOLD + " defeated " + ChatColor.YELLOW + GuildWarText.guildLabel(loserGuild)
                 + ChatColor.GOLD + " in the Guild War!");
 
-        runRewards(challenge, arena.getName(), winnerGuild, loserGuild);
+        runRewards(arena.getName(), winnerGuild, winnerRoster, loserGuild, loserRoster);
     }
 
     /** Run the configured winner / loser command rewards for a just-decided war. */
-    private static void runRewards(final Challenge challenge, final String arenaName,
-                                   final UUID winnerGuild, final UUID loserGuild) {
+    private static void runRewards(final String arenaName, final UUID winnerGuild, final Set<UUID> winnerRoster,
+                                   final UUID loserGuild, final Set<UUID> loserRoster) {
         final GuildBridge guilds = GuildBridge.get();
         final String winTag = guilds.clanName(winnerGuild);
         final String loseTag = guilds.clanName(loserGuild);
-        final Set<UUID> winnerRoster = new HashSet<>(challenge.roster(challenge.sideOfGuild(winnerGuild)));
-        final Set<UUID> loserRoster = new HashSet<>(challenge.roster(challenge.sideOfGuild(loserGuild)));
 
         GuildWarRewards.run(arenaName, winTag, loseTag, winnerRoster, winnerGuild,
                 GuildWarConfig.get().winnerCommands());
@@ -634,7 +672,9 @@ final class GuildWarChallenge {
         // challenge registered until those wins are tallied, then close on the next tick.
         final PVPArena plugin = PVPArena.getInstance();
         final String arenaName = arena.getName();
-        if (plugin != null) {
+        // Shutting down: the scheduler rejects tasks once the plugin is disabled, and there is no
+        // next tick for the wins to be tallied in — close now.
+        if (plugin != null && !plugin.isShuttingDown()) {
             Bukkit.getScheduler().runTask(plugin, () -> ChallengeRegistry.close(arenaName));
         } else {
             ChallengeRegistry.close(arenaName);
@@ -842,22 +882,48 @@ final class GuildWarChallenge {
         return guilds.isAvailable() ? guilds.guildId(player) : null;
     }
 
+    /** Comma-separated pretty list of every configured GuildWar gamemode (for the unknown-mode hint). */
+    private static String gamemodeList() {
+        final StringBuilder sb = new StringBuilder();
+        for (final String g : GuildWarArenas.allGamemodes()) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(GuildWarText.prettyGamemode(g));
+        }
+        return sb.length() == 0 ? "(none configured)" : sb.toString();
+    }
+
     private static int maxCount(final int onlineOwn, final int onlineEnemy) {
         return Math.max(1, Math.min(Math.min(onlineOwn, onlineEnemy), GuildWarConfig.get().maxCount()));
     }
 
-    /** Seconds a guild still has to wait before it may issue another challenge (0 = none / ready). */
-    private static long cooldownRemainingSeconds(final UUID guildId) {
-        final long cooldownMs = GuildWarConfig.get().cooldownSeconds() * 1000L;
+    /** Millis a guild still has to wait after a loss before it may take part again (0 = none / ready). */
+    private static long cooldownRemainingMillis(final UUID guildId) {
+        final long cooldownMs = (long) (GuildWarConfig.get().cooldownHours() * 3_600_000L);
         if (cooldownMs <= 0 || guildId == null) {
             return 0;
         }
-        final Long last = LAST_CHALLENGE_AT.get(guildId);
-        if (last == null) {
+        final long lastLoss = GuildWarCooldownStore.get().lastLoss(guildId);
+        if (lastLoss <= 0) {
             return 0;
         }
-        final long remainingMs = last + cooldownMs - System.currentTimeMillis();
-        return remainingMs > 0 ? (remainingMs + 999) / 1000 : 0;
+        return Math.max(0, lastLoss + cooldownMs - System.currentTimeMillis());
+    }
+
+    /** Human-friendly remaining duration: {@code 2h 15m}, {@code 15m 3s}, or {@code 9s}. */
+    private static String formatDuration(final long millis) {
+        final long totalSec = (millis + 999) / 1000;
+        final long h = totalSec / 3600;
+        final long m = (totalSec % 3600) / 60;
+        final long s = totalSec % 60;
+        if (h > 0) {
+            return h + "h " + m + "m";
+        }
+        if (m > 0) {
+            return m + "m " + s + "s";
+        }
+        return s + "s";
     }
 
     private static Integer parseCount(final String s) {
@@ -894,7 +960,7 @@ final class GuildWarChallenge {
         final GuildWarConfig cfg = GuildWarConfig.get();
         player.sendMessage(ChatColor.GRAY + "count range (config): " + ChatColor.WHITE
                 + cfg.minCount() + ".." + cfg.maxCount()
-                + ChatColor.GRAY + "  cooldown=" + ChatColor.WHITE + cfg.cooldownSeconds() + "s");
+                + ChatColor.GRAY + "  loss-cooldown=" + ChatColor.WHITE + cfg.cooldownHours() + "h");
         player.sendMessage(ChatColor.GRAY + "accept-roles: " + ChatColor.WHITE + cfg.acceptRoles()
                 + ChatColor.GRAY + "  join-roles: " + ChatColor.WHITE
                 + (cfg.joinRoles().isEmpty() ? "(any member)" : cfg.joinRoles())
@@ -910,6 +976,9 @@ final class GuildWarChallenge {
             player.sendMessage(ChatColor.GRAY + "  members=" + guilds.guildMembers(own).size()
                     + " online=" + guilds.onlineMembers(own).size()
                     + " yourRole=" + (guilds.canManageWar(player, own) ? "officer(can accept)" : "member"));
+            final long ownCd = cooldownRemainingMillis(own);
+            player.sendMessage(ChatColor.GRAY + "  loss-cooldown: " + ChatColor.WHITE
+                    + (ownCd > 0 ? formatDuration(ownCd) + " remaining" : "ready"));
         }
 
         // All guilds with online members

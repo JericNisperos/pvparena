@@ -13,3 +13,4 @@ dependency-reduced-pom.xml
 /.project
 plans/
 pvpmodules/pvparena_modules
+.claude

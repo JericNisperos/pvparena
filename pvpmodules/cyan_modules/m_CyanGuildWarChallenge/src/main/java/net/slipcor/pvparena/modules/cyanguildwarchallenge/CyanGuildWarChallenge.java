@@ -61,8 +61,14 @@ public class CyanGuildWarChallenge extends ArenaModule {
         try {
             GuildWarConfig.get().load();
             GuildWarResultStore.get().load();
+            GuildWarCooldownStore.get().load();
             GuildWarCommand.ensureRegistered(getCommandMap());
             GuildWarListener.ensureRegistered();
+            // Optional PlaceholderAPI hook — only touch the PAPI-extending class when PAPI is present,
+            // so this module still loads on servers without PlaceholderAPI installed.
+            if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
+                GuildWarPlaceholders.registerSafely();
+            }
         } catch (final Throwable t) {
             logger().warning("[CyanGuildWarChallenge] Could not wire up Guild War: " + t.getMessage());
         }

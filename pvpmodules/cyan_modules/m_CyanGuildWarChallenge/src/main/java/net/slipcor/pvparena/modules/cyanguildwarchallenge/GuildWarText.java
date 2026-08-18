@@ -23,6 +23,19 @@ final class GuildWarText {
         return noColor.replaceAll("\\p{Cntrl}", "").trim();
     }
 
+    /**
+     * Human-readable form of a gamemode label (the arena-name suffix after the prefix, trailing digits
+     * stripped — see {@link GuildWarArenas#gamemodeOf}). No-suffix arenas resolve to {@code "skirmish"}
+     * upstream, so a blank/null label here renders as {@code "Skirmish"}; otherwise the label with its
+     * first letter capitalized, e.g. {@code domination -> Domination}.
+     */
+    static String prettyGamemode(final String gamemode) {
+        if (gamemode == null || gamemode.isEmpty()) {
+            return "Skirmish";
+        }
+        return Character.toUpperCase(gamemode.charAt(0)) + gamemode.substring(1);
+    }
+
     /** A human-readable, sanitized label for a guild: its name/tag, else a short UUID. */
     static String guildLabel(final UUID guildId) {
         if (guildId != null) {
@@ -33,5 +46,24 @@ final class GuildWarText {
             return "guild " + guildId.toString().substring(0, 8);
         }
         return "a guild";
+    }
+
+    /**
+     * Display name for a guild that may be offline/disbanded: its live UClans tag if resolvable, else
+     * the {@code storedName} kept with its results, else a short UUID. Used by the leaderboard and the
+     * PlaceholderAPI expansion so a guild still shows a label when UClans can't resolve it.
+     */
+    static String guildDisplay(final UUID guildId, final String storedName) {
+        if (guildId != null) {
+            final String live = sanitize(GuildBridge.get().clanName(guildId));
+            if (!live.isEmpty()) {
+                return live;
+            }
+        }
+        final String stored = sanitize(storedName);
+        if (!stored.isEmpty()) {
+            return stored;
+        }
+        return guildId == null ? "" : "guild " + guildId.toString().substring(0, 8);
     }
 }

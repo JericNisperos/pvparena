@@ -1,6 +1,6 @@
 package net.slipcor.pvparena.goals.cyangladiator;
 
-import net.slipcor.pvparena.arena.Arena;
+import net.slipcor.pvparena.PVPArena;
 import net.slipcor.pvparena.arena.ArenaPlayer;
 import net.slipcor.pvparena.arena.ArenaTeam;
 import net.slipcor.pvparena.arena.PlayerStatus;
@@ -11,8 +11,10 @@ import net.slipcor.pvparena.loadables.ArenaModuleManager;
 import net.slipcor.pvparena.managers.SpawnManager;
 import net.slipcor.pvparena.managers.TeleportManager;
 import org.bukkit.ChatColor;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -24,27 +26,28 @@ import java.util.stream.Collectors;
 /**
  * <pre>Gladiator — a guild battle-royale goal (UltimateClans-backed).</pre>
  *
- * Free-for-all where players fight as their <b>Guild</b>; guild-mates can't hurt each other
- * (handled by {@link GladiatorListener}); <b>last guild standing wins</b>. Single life. Players
- * without a guild are rejected; the match won't start until ≥ 2 distinct guilds are present; and
- * each guild spawns together at its own {@code fight} spawn.
+ * Free-for-all where players fight as their <b>Guild</b>; guild-mates can't hurt each other,
+ * <b>last guild standing wins</b>. Players without a guild are rejected; the match won't start until
+ * the configured number of distinct guilds is present; and each guild spawns together at its own
+ * {@code fight} spawn.
  *
- * <p>This goal handles only <b>gameplay</b>. Rewards and the {@code /gladiatorjoin} command live in
- * the companion module <b>GladiatorMod</b> (hot-reloadable). The goal therefore <b>requires that
- * module to be enabled on the arena</b> — see {@link #checkJoin}.</p>
+ * <p>This goal is intentionally <b>thin</b> — it owns only the win condition, guild-grouped spawns
+ * and lives. Everything else (friendly fire, the start gate, the {@code /gladiator} command, config,
+ * rewards, the leaderboard and PlaceholderAPI) lives in the hot-reloadable companion module
+ * <b>CyanGladiatorMod</b>, which wires itself globally and so does <b>not</b> need to be attached to
+ * the arena.</p>
  *
  * <p>Shipped as an external goal jar in {@code PVPArena/goals/} — no core edit. Reaches the guild
- * API via {@link GuildBridge} (reflection), so no {@code plugin.yml} softdepend is needed.</p>
+ * API via {@link GuildBridge} (reflection), so no {@code plugin.yml} softdepend is needed. The one
+ * value the goal shares with the module — {@code lives} — is read directly from the module's
+ * {@code cyan_gladiator_config.yml} (goal and module live in separate classloaders, so they can't
+ * reference each other's types).</p>
  */
 public class GoalGladiator extends AbstractPlayerLivesGoal {
 
-    /** Module (in /mods) that must be enabled on the arena for Gladiator to run. */
-    static final String GLADIATOR_MOD_NAME = "GladiatorMod";
-
-    static {
-        // Runs at plugin enable (JarLoader loads goal classes with Class.forName(..., initialize = true)).
-        GladiatorListener.ensureRegistered();
-    }
+    /** Central config file (owned by CyanGladiatorMod); the goal reads only {@code lives} from it. */
+    private static final String CONFIG_FILE = "cyan_gladiator_config.yml";
+    private static final int DEFAULT_LIVES = 1;
 
     public GoalGladiator() {
         super("Gladiator");
@@ -60,10 +63,10 @@ public class GoalGladiator extends AbstractPlayerLivesGoal {
         return true;
     }
 
-    /** Single life — eliminated on first death. */
+    /** Lives per player (default 1 = single-life battle royale), from the module's config file. */
     @Override
     protected int getLivesConfigValue() {
-        return 1;
+        return configuredLives();
     }
 
     @Override
@@ -74,14 +77,6 @@ public class GoalGladiator extends AbstractPlayerLivesGoal {
     @Override
     public void checkJoin(final Player player, final String[] args) throws GameplayException {
         super.checkJoin(player, args);
-
-        // Gladiator pairs with the GladiatorMod module (rewards + /gladiatorjoin). Require it.
-        boolean modEnabled = this.arena.getMods().stream()
-                .anyMatch(mod -> GLADIATOR_MOD_NAME.equals(mod.getName()));
-        if (!modEnabled) {
-            throw new GameplayException(ChatColor.RED
-                    + "The Gladiator module is not enabled on this arena (enable GladiatorMod).");
-        }
 
         final GuildBridge guilds = GuildBridge.get();
         if (!guilds.isAvailable()) {
@@ -94,14 +89,32 @@ public class GoalGladiator extends AbstractPlayerLivesGoal {
 
     @Override
     public void initiate(final ArenaPlayer arenaPlayer) {
-        // Set the single life directly (NOT via updateLives) so it stays 1 even if the arena has
-        // general.addLivesPerPlayer enabled — that would otherwise multiply lives by player count.
-        this.getPlayerLifeMap().put(arenaPlayer, 1);
+        // Set lives directly (NOT via updateLives) so general.addLivesPerPlayer can't multiply them.
+        this.getPlayerLifeMap().put(arenaPlayer, configuredLives());
     }
 
     @Override
     public void parseStart() {
-        this.arena.getFighters().forEach(arenaPlayer -> this.getPlayerLifeMap().put(arenaPlayer, 1));
+        final int lives = configuredLives();
+        this.arena.getFighters().forEach(arenaPlayer -> this.getPlayerLifeMap().put(arenaPlayer, lives));
+    }
+
+    /** Read {@code lives} from the module's config file; falls back to a single life. */
+    private static int configuredLives() {
+        try {
+            final PVPArena plugin = PVPArena.getInstance();
+            if (plugin == null) {
+                return DEFAULT_LIVES;
+            }
+            final File file = new File(plugin.getDataFolder(), CONFIG_FILE);
+            if (!file.exists()) {
+                return DEFAULT_LIVES;
+            }
+            final int lives = YamlConfiguration.loadConfiguration(file).getInt("lives", DEFAULT_LIVES);
+            return lives > 0 ? lives : DEFAULT_LIVES;
+        } catch (final Throwable t) {
+            return DEFAULT_LIVES;
+        }
     }
 
     // ---- Guild-based spawns: each guild spawns together on its own fight spawn (wraps) -----------
